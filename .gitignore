@@ -103,4 +103,10 @@ cypress/screenshots
 
 # nyc test coverage
 # =========
-.nyc_output/
+.nyc_output/.push.all
+
+# task-related
+# =========
+.save.*
+.push.*
+.task

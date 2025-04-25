@@ -1,1 +1,6 @@
 .git
+buildno
+Taskfile.yml
+.push.*
+.task
+.save.*

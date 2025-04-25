@@ -1,0 +1,131 @@
+version: '3'
+
+vars:
+  NAME:
+    sh: jq -r .name package.json
+  VERSION:
+    sh: if [ -n '{{.VERSION}}' ]; then echo '{{.VERSION}}'; else echo "$(jq -r .version package.json)-$(cat buildno)"; fi
+  TAG_PREFIX: 'reg.ifddev.com/ifd/{{.NAME}}'
+  TAG: '{{.TAG_PREFIX}}:{{.VERSION}}'
+  V_NO_CACHE: '--no-cache'
+  V_SAVE: '--load'
+  V_PUSH: '--rm --push'
+  V_PLATFORM_AMD64: 'linux/amd64'
+  V_PLATFORM_ARM64: 'linux/arm64/v8'
+  V_PLATFORM_ALL: '{{.V_PLATFORM_AMD64}},{{.V_PLATFORM_ARM64}}'
+  F_PUSH: '.push'
+  F_SAVE: '.save'
+
+tasks:
+
+  version:
+    desc: 'Print version number'
+    cmds:
+      - cmd: echo '{{.VERSION}}'
+        silent: true
+
+  list:
+    desc: 'List of tasks'
+    silent: true
+    cmds:
+      - cmd: task --list
+
+  _build:
+    internal: true
+    vars:
+      ARCH: '{{.ARCH| default "all"}}'
+      ACTION: '{{.ACTION| default .V_PUSH}}'
+      FILE: '{{if eq .ACTION .V_PUSH}}{{.F_PUSH}}{{else}}{{.F_SAVE}}{{end}}'
+      FILENAME: '{{.FILE}}.{{.ARCH}}'
+      PLATFORM: '{{if eq .ARCH "all"}}{{.V_PLATFORM_ALL}}{{end}}{{if eq .ARCH "amd64"}}{{.V_PLATFORM_AMD64}}{{end}}{{if eq .ARCH "arm64"}}{{.V_PLATFORM_ARM64}}{{end}}'
+    cmds:
+      - docker buildx build -f Dockerfile.multi {{.NO_CACHE}} {{.ACTION}} --platform={{.PLATFORM}} -t {{.TAG}} .
+      - touch {{.FILENAME}}
+    sources:
+      - Dockerfile.multi
+      - package.json
+      - buildno
+    generates:
+      - '{{.FILENAME}}'
+    status:
+      - test -f {{.FILENAME}}
+      - if [ "{{.ACTION}}" == "{{.V_SAVE}}" ] && docker images | grep "{.TAG_PREFIX}" | tr -s ' ' | cut -d' ' -f1,2 | sed 's/ /:/' | grep -qs "{{.TAG}}"
+
+  build:
+    desc: 'Build multiarch amd64/arm64 docker images and push them to the registry'
+    cmds:
+      - task: _build
+        vars: { ARCH: '{{.ARCH}}', NO_CACHE: '{{.NO_CACHE}}' }
+
+  build:amd64:
+    desc: 'Build amd64 docker image and push it to the registry'
+    cmds:
+      - task: build
+        vars: { ARCH: 'amd64' }
+
+  build:arm64:
+    desc: 'Build arm64 docker image and push it to the registry'
+    cmds:
+      - task: build
+        vars: { ARCH: 'arm64' }
+
+  rebuild:
+    desc: 'Rebuild multiarch amd64/arm64 docker images and push them to the registry'
+    vars:
+      ARCH: '{{.ARCH| default "all"}}'
+    cmds:
+      - rm -f {{.F_PUSH}}.{{.ARCH}}
+      - task: build
+        vars: { ARCH: '{{.ARCH}}', NO_CACHE: '{{.V_NO_CACHE}}' }
+
+  rebuild:amd64:
+    desc: 'Rebuild amd64 docker image and push it to the registry'
+    cmds:
+      - task: rebuild
+        vars: { ARCH: 'amd64' }
+
+  rebuild:arm64:
+    desc: 'Rebuild arm64 docker image and push it to the registry'
+    cmds:
+      - task: rebuild
+        vars: { ARCH: 'arm64' }
+
+  build:local:
+    cmds:
+      - task: _build
+        vars: { ARCH: '{{.ARCH}}', NO_CACHE: '{{.NO_CACHE}}', ACTION: '{{.V_SAVE}}' }
+
+  build:local:amd64:
+    desc: 'Build amd64 docker image and save it locally'
+    cmds:
+      - task: build:local
+        vars: { ARCH: 'amd64' }
+
+  build:local:arm64:
+    desc: 'Build arm64 docker image and save it locally'
+    cmds:
+      - task: build:local
+        vars: { ARCH: 'arm64' }
+
+  rebuild:local:
+    cmds:
+      - rm -f {{.F_SAVE}}.{{.ARCH}}
+      - task: build:local
+        vars: { ARCH: '{{.ARCH}}', NO_CACHE: '{{.V_NO_CACHE}}' }
+
+  rebuild:local:amd64:
+    desc: 'Reuild amd64 docker image and save it locally'
+    cmds:
+      - task: rebuild:local
+        vars: { ARCH: 'amd64' }
+
+  rebuild:local:arm64:
+    desc: 'Reuild arm64 docker image and save it locally'
+    cmds:
+      - task: rebuild:local
+        vars: { ARCH: 'arm64' }
+
+  clean:
+    desc: 'Cleanup.'
+    cmds:
+      - rm -f {{.F_PUSH}}* {{.F_SAVE}}*
