@@ -108,7 +108,7 @@ export default {
     whitelist: [],
 
     // blacklist: hide databases listed in the blacklist (empty list for no blacklist)
-    blacklist: [],
+    blacklist: ['admin', 'config', 'local'],
   },
 
   site: {
